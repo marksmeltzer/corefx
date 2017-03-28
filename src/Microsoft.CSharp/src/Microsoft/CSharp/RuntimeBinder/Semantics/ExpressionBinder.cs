@@ -2,7 +2,6 @@
 // The .NET Foundation licenses this file to you under the MIT license.
 // See the LICENSE file in the project root for more information.
 
-using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using Microsoft.CSharp.RuntimeBinder.Errors;
@@ -29,14 +28,6 @@ namespace Microsoft.CSharp.RuntimeBinder.Semantics
         public bool fHasExprs;
         public List<EXPR> prgexpr;
     }
-
-    internal enum BodyType
-    {
-        NormalBlock,
-        StatementExpression,
-        ReturnedExpression
-    }
-
 
     internal enum ConstCastResult
     {
@@ -367,11 +358,6 @@ namespace Microsoft.CSharp.RuntimeBinder.Semantics
 
         private ExprFactory ExprFactory { get { return Context.GetExprFactory(); } }
 
-        private ConstValFactory GetExprConstants()
-        {
-            return GetExprFactory().GetExprConstants();
-        }
-
         private AggregateType GetReqPDT(PredefinedType pt)
         {
             return GetReqPDT(pt, GetSymbolLoader());
@@ -576,18 +562,18 @@ namespace Microsoft.CSharp.RuntimeBinder.Semantics
             // the time of the cast and the assignment to the local, we're toast.
             EXPRWRAP wrapArray = WrapShortLivedExpression(array).asWRAP();
             EXPR save = GetExprFactory().CreateSave(wrapArray);
-            EXPR nullTest = GetExprFactory().CreateBinop(ExpressionKind.EK_NE, GetReqPDT(PredefinedType.PT_BOOL), save, GetExprFactory().CreateConstant(wrapArray.type, ConstValFactory.GetInt(0)));
+            EXPR nullTest = GetExprFactory().CreateBinop(ExpressionKind.EK_NE, GetReqPDT(PredefinedType.PT_BOOL), save, GetExprFactory().CreateConstant(wrapArray.type, ConstVal.Get(0)));
             EXPR lenTest;
 
             if (array.type.AsArrayType().rank == 1)
             {
                 EXPR len = GetExprFactory().CreateArrayLength(wrapArray);
-                lenTest = GetExprFactory().CreateBinop(ExpressionKind.EK_NE, GetReqPDT(PredefinedType.PT_BOOL), len, GetExprFactory().CreateConstant(GetReqPDT(PredefinedType.PT_INT), ConstValFactory.GetInt(0)));
+                lenTest = GetExprFactory().CreateBinop(ExpressionKind.EK_NE, GetReqPDT(PredefinedType.PT_BOOL), len, GetExprFactory().CreateConstant(GetReqPDT(PredefinedType.PT_INT), ConstVal.Get(0)));
             }
             else
             {
                 EXPRCALL call = BindPredefMethToArgs(PREDEFMETH.PM_ARRAY_GETLENGTH, wrapArray, null, null, null);
-                lenTest = GetExprFactory().CreateBinop(ExpressionKind.EK_NE, GetReqPDT(PredefinedType.PT_BOOL), call, GetExprFactory().CreateConstant(GetReqPDT(PredefinedType.PT_INT), ConstValFactory.GetInt(0)));
+                lenTest = GetExprFactory().CreateBinop(ExpressionKind.EK_NE, GetReqPDT(PredefinedType.PT_BOOL), call, GetExprFactory().CreateConstant(GetReqPDT(PredefinedType.PT_INT), ConstVal.Get(0)));
             }
 
             test = GetExprFactory().CreateBinop(ExpressionKind.EK_LOGAND, GetReqPDT(PredefinedType.PT_BOOL), nullTest, lenTest);
@@ -597,7 +583,7 @@ namespace Microsoft.CSharp.RuntimeBinder.Semantics
             EXPR pLastList = null;
             for (int cc = 0; cc < array.type.AsArrayType().rank; cc++)
             {
-                GetExprFactory().AppendItemToList(GetExprFactory().CreateConstant(GetReqPDT(PredefinedType.PT_INT), ConstValFactory.GetInt(0)), ref pList, ref pLastList);
+                GetExprFactory().AppendItemToList(GetExprFactory().CreateConstant(GetReqPDT(PredefinedType.PT_INT), ConstVal.Get(0)), ref pList, ref pLastList);
             }
             Debug.Assert(list != null);
 
@@ -719,9 +705,9 @@ namespace Microsoft.CSharp.RuntimeBinder.Semantics
 
             if (exprConst != null && exprFlags == 0 &&
                 exprSrc.type.fundType() == typeDest.fundType() &&
-                (!exprSrc.type.isPredefType(PredefinedType.PT_STRING) || exprConst.asCONSTANT().getVal().IsNullRef()))
+                (!exprSrc.type.isPredefType(PredefinedType.PT_STRING) || exprConst.asCONSTANT().Val.IsNullRef))
             {
-                EXPRCONSTANT expr = GetExprFactory().CreateConstant(typeDest, exprConst.asCONSTANT().getVal());
+                ExprConstant expr = GetExprFactory().CreateConstant(typeDest, exprConst.asCONSTANT().Val);
                 pexprDest = expr;
                 return;
             }
@@ -2305,12 +2291,12 @@ namespace Microsoft.CSharp.RuntimeBinder.Semantics
         ////////////////////////////////////////////////////////////////////////////////
         // Check to see if an integral constant is within range of a integral 
         // destination type.
-        private static bool isConstantInRange(EXPRCONSTANT exprSrc, CType typeDest)
+        private static bool isConstantInRange(ExprConstant exprSrc, CType typeDest)
         {
             return isConstantInRange(exprSrc, typeDest, false);
         }
 
-        private static bool isConstantInRange(EXPRCONSTANT exprSrc, CType typeDest, bool realsOk)
+        private static bool isConstantInRange(ExprConstant exprSrc, CType typeDest, bool realsOk)
         {
             FUNDTYPE ftSrc = exprSrc.type.fundType();
             FUNDTYPE ftDest = typeDest.fundType();
@@ -2336,7 +2322,7 @@ namespace Microsoft.CSharp.RuntimeBinder.Semantics
             // if converting from float to an integral type, we need to check whether it fits
             if (ftSrc > FUNDTYPE.FT_LASTINTEGRAL)
             {
-                double dvalue = (exprSrc.asCONSTANT().getVal().doubleVal);
+                double dvalue = (exprSrc.asCONSTANT().Val.DoubleVal);
 
                 switch (ftDest)
                 {
@@ -2389,36 +2375,36 @@ namespace Microsoft.CSharp.RuntimeBinder.Semantics
             // U8 src is unsigned, so deal with values > MAX_LONG here.
             if (ftSrc == FUNDTYPE.FT_U8)
             {
-                ulong value = exprSrc.asCONSTANT().getU64Value();
+                ulong value = exprSrc.asCONSTANT().UInt64Value;
 
                 switch (ftDest)
                 {
                     case FUNDTYPE.FT_I1:
-                        if (value <= (ulong)SByte.MaxValue)
+                        if (value <= (ulong)sbyte.MaxValue)
                             return true;
                         break;
                     case FUNDTYPE.FT_I2:
-                        if (value <= (ulong)Int16.MaxValue)
+                        if (value <= (ulong)short.MaxValue)
                             return true;
                         break;
                     case FUNDTYPE.FT_I4:
-                        if (value <= Int32.MaxValue)
+                        if (value <= int.MaxValue)
                             return true;
                         break;
                     case FUNDTYPE.FT_I8:
-                        if (value <= Int64.MaxValue)
+                        if (value <= long.MaxValue)
                             return true;
                         break;
                     case FUNDTYPE.FT_U1:
-                        if (value <= Byte.MaxValue)
+                        if (value <= byte.MaxValue)
                             return true;
                         break;
                     case FUNDTYPE.FT_U2:
-                        if (value <= UInt16.MaxValue)
+                        if (value <= ushort.MaxValue)
                             return true;
                         break;
                     case FUNDTYPE.FT_U4:
-                        if (value <= UInt32.MaxValue)
+                        if (value <= uint.MaxValue)
                             return true;
                         break;
                     case FUNDTYPE.FT_U8:
@@ -2429,7 +2415,7 @@ namespace Microsoft.CSharp.RuntimeBinder.Semantics
             }
             else
             {
-                long value = exprSrc.asCONSTANT().getI64Value();
+                long value = exprSrc.asCONSTANT().Int64Value;
 
                 switch (ftDest)
                 {

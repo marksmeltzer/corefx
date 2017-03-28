@@ -453,12 +453,8 @@ def buildArchConfiguration = ['Debug': 'x86',
 }
 
 // **************************
-// Define Linux ARM Emulator testing. This creates a per PR job which
-// cross builds native binaries for the Emulator rootfs.
-// NOTE: To add Ubuntu-ARM cross build jobs to this code, add the Ubuntu OS to the
-// OS array, branch the steps to be performed by Ubuntu and the Linux ARM emulator
-// based on the OS being handled, and handle the triggers accordingly
-// (the machine affinity of the new job remains the same)
+// Define Linux ARM builds. These jobs run on every merge.
+// Some jobs run on every PR. The ones that don't run per PR can be requested via a phrase.
 // **************************
 [true, false].each { isPR ->
     ['netcoreapp'].each { targetGroup ->
@@ -504,7 +500,13 @@ def buildArchConfiguration = ['Debug': 'x86',
 
                 // Set up triggers
                 if (isPR) {
-                    Utilities.addGithubPRTriggerForBranch(newJob, branch, "Innerloop ${osName} ${abi} ${configurationGroup} Cross Build", "(?i).*test\\W+innerloop\\W+${osName}\\W+${abi}\\W+${configurationGroup}.*")
+                    // We run Tizen release/debug, Ubuntu 14.04 release and Ubuntu 16.04 debug for ARM on every PR.
+                    if (osName == "Tizen" || (osName == "Ubuntu14.04" && configurationGroup == "Release") || (osName == "Ubuntu16.04" && configurationGroup == "Debug")) {
+                        Utilities.addGithubPRTriggerForBranch(newJob, branch, "Innerloop ${osName} ${abi} ${configurationGroup} Cross Build")
+                    }
+                    else {
+                        Utilities.addGithubPRTriggerForBranch(newJob, branch, "Innerloop ${osName} ${abi} ${configurationGroup} Cross Build", "(?i).*test\\W+innerloop\\W+${osName}\\W+${abi}\\W+${configurationGroup}.*")
+                    }
                 }
                 else {
                     // Set a push trigger
@@ -514,6 +516,41 @@ def buildArchConfiguration = ['Debug': 'x86',
         } // configurationGroup
     } // targetGroup
 } // isPR
+
+// **************************
+// Define Linux x86 builds. These jobs run daily and results will be used for CoreCLR test
+// TODO: innerloop & outerloop testing & merge to general job generation routine
+// **************************
+['Debug', 'Release'].each { configurationGroup ->
+    def osName = 'Ubuntu16.04'
+    def archGroup = 'x86'
+    def newJobName = "${osName.toLowerCase()}_${archGroup}_${configurationGroup.toLowerCase()}"
+
+    def newJob = job(Utilities.getFullJobName(project, newJobName, false)) {
+        steps {
+            // Call x86_ci_script.sh script to perform the cross build of native corefx
+            def script = "./cross/x86_ci_script.sh --buildConfig=${configurationGroup.toLowerCase()}"
+            shell(script)
+
+            // Tar up the appropriate bits
+            shell("tar -czf bin/bin.tar.gz --directory=\"bin/Linux.${archGroup}.${configurationGroup}/native\" .")
+        }
+    }
+    
+    // The cross build jobs run on Ubuntu 14.04 in spite of the target is Ubuntu 16.04. 
+    // The ubuntu 14.04 arm-cross-latest version contains the packages needed for cross building corefx
+    Utilities.setMachineAffinity(newJob, 'Ubuntu14.04', 'arm-cross-latest')
+
+    // Set up standard options.
+    Utilities.standardJobSetup(newJob, project, false, "*/${branch}")
+
+    // Add archival for the built binaries
+    def archiveContents = "bin/build.tar.gz"
+    Utilities.addArchival(newJob, archiveContents)
+
+    // Set a push trigger as a daily work
+    Utilities.addPeriodicTrigger(newJob, '@daily')
+}
 
 JobReport.Report.generateJobReport(out)
 

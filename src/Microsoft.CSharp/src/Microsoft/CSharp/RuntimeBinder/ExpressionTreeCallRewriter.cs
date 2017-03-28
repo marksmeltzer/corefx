@@ -27,7 +27,7 @@ namespace Microsoft.CSharp.RuntimeBinder
         }
 
         private readonly Dictionary<EXPRCALL, Expression> _DictionaryOfParameters;
-        private readonly IEnumerable<Expression> _ListOfParameters;
+        private readonly Expression[] _ListOfParameters;
         private readonly TypeManager _typeManager;
         // Counts how many EXPRSAVEs we've encountered so we know which index into the 
         // parameter list we should be taking.
@@ -35,7 +35,7 @@ namespace Microsoft.CSharp.RuntimeBinder
 
         /////////////////////////////////////////////////////////////////////////////////
 
-        private ExpressionTreeCallRewriter(TypeManager typeManager, IEnumerable<Expression> listOfParameters)
+        private ExpressionTreeCallRewriter(TypeManager typeManager, Expression[] listOfParameters)
         {
             _typeManager = typeManager;
             _DictionaryOfParameters = new Dictionary<EXPRCALL, Expression>();
@@ -44,7 +44,7 @@ namespace Microsoft.CSharp.RuntimeBinder
 
         /////////////////////////////////////////////////////////////////////////////////
 
-        public static Expression Rewrite(TypeManager typeManager, EXPR pExpr, IEnumerable<Expression> listOfParameters)
+        public static Expression Rewrite(TypeManager typeManager, EXPR pExpr, Expression[] listOfParameters)
         {
             ExpressionTreeCallRewriter rewriter = new ExpressionTreeCallRewriter(typeManager, listOfParameters);
 
@@ -83,7 +83,7 @@ namespace Microsoft.CSharp.RuntimeBinder
 
             EXPRCALL call = pExpr.GetOptionalLeftChild().asCALL();
             EXPRTYPEOF TypeOf = call.GetOptionalArguments().asLIST().GetOptionalElement().asTYPEOF();
-            Expression parameter = _ListOfParameters.ElementAt(_currentParameterIndex++);
+            Expression parameter = _ListOfParameters[_currentParameterIndex++];
             _DictionaryOfParameters.Add(call, parameter);
 
             return null;
@@ -537,8 +537,8 @@ namespace Microsoft.CSharp.RuntimeBinder
             bool bIsLifted = false;
             if (list.GetOptionalNextListNode().isLIST())
             {
-                EXPRCONSTANT isLifted = list.GetOptionalNextListNode().asLIST().GetOptionalElement().asCONSTANT();
-                bIsLifted = isLifted.getVal().iVal == 1;
+                ExprConstant isLifted = list.GetOptionalNextListNode().asLIST().GetOptionalElement().asCONSTANT();
+                bIsLifted = isLifted.Val.Int32Val == 1;
                 methodInfo = GetMethodInfoFromExpr(list.GetOptionalNextListNode().asLIST().GetOptionalNextListNode().asMETHODINFO());
             }
             else
@@ -867,7 +867,7 @@ namespace Microsoft.CSharp.RuntimeBinder
             }
             else if (pExpr.isCONSTANT())
             {
-                CONSTVAL val = pExpr.asCONSTANT().Val;
+                ConstVal val = pExpr.asCONSTANT().Val;
                 CType underlyingType = pExpr.type;
                 object objval;
 
@@ -884,49 +884,49 @@ namespace Microsoft.CSharp.RuntimeBinder
                 switch (Type.GetTypeCode(underlyingType.AssociatedSystemType))
                 {
                     case TypeCode.Boolean:
-                        objval = val.boolVal;
+                        objval = val.BooleanVal;
                         break;
                     case TypeCode.SByte:
-                        objval = val.sbyteVal;
+                        objval = val.SByteVal;
                         break;
                     case TypeCode.Byte:
-                        objval = val.byteVal;
+                        objval = val.ByteVal;
                         break;
                     case TypeCode.Int16:
-                        objval = val.shortVal;
+                        objval = val.Int16Val;
                         break;
                     case TypeCode.UInt16:
-                        objval = val.ushortVal;
+                        objval = val.UInt16Val;
                         break;
                     case TypeCode.Int32:
-                        objval = val.iVal;
+                        objval = val.Int32Val;
                         break;
                     case TypeCode.UInt32:
-                        objval = val.uiVal;
+                        objval = val.UInt32Val;
                         break;
                     case TypeCode.Int64:
-                        objval = val.longVal;
+                        objval = val.Int64Val;
                         break;
                     case TypeCode.UInt64:
-                        objval = val.ulongVal;
+                        objval = val.UInt64Val;
                         break;
                     case TypeCode.Single:
-                        objval = val.floatVal;
+                        objval = val.SingleVal;
                         break;
                     case TypeCode.Double:
-                        objval = val.doubleVal;
+                        objval = val.DoubleVal;
                         break;
                     case TypeCode.Decimal:
-                        objval = val.decVal;
+                        objval = val.DecimalVal;
                         break;
                     case TypeCode.Char:
-                        objval = val.cVal;
+                        objval = val.CharVal;
                         break;
                     case TypeCode.String:
-                        objval = val.strVal;
+                        objval = val.StringVal;
                         break;
                     default:
-                        objval = val.objectVal;
+                        objval = val.ObjectVal;
                         break;
                 }
 
